@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Election Results - Online Voting System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .result-card {
+            transition: transform 0.2s;
+            border-left: 4px solid #007bff;
+            margin-bottom: 20px;
+        }
+        .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .result-card.winner {
+            border-left-color: #28a745;
+            background-color: #f8fff9;
+        }
+        .party-logo {
+            max-width: 80px;
+            max-height: 80px;
+            object-fit: contain;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .election-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .progress {
+            height: 25px;
+        }
+        .winner-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-vote-yea me-2"></i>Online Voting System
+            </a>
+            <div class="navbar-nav ms-auto">
+                {% if session.get('is_admin') %}
+                    <a class="nav-link" href="{{ url_for('admin_dashboard') }}">
+                        <i class="fas fa-cog me-1"></i> Admin Dashboard
+                    </a>
+                {% elif session.get('user_id') %}
+                    <a class="nav-link" href="{{ url_for('voter_dashboard') }}">
+                        <i class="fas fa-user me-1"></i> Voter Dashboard
+                    </a>
+                {% endif %}
+                <a class="nav-link" href="{{ url_for('index') }}">
+                    <i class="fas fa-home me-1"></i> Home
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Election Header -->
+        <div class="card election-header mb-4">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h2 class="mb-2">{{ election.name }}</h2>
+                        <p class="mb-1">
+                            <i class="fas fa-calendar me-2"></i>
+                            <strong>Period:</strong> 
+                            {{ election.start_time.strftime('%Y-%m-%d %H:%M') if election.start_time else 'N/A' }} - 
+                            {{ election.end_time.strftime('%Y-%m-%d %H:%M') if election.end_time else 'N/A' }}
+                        </p>
+                        <p class="mb-0">
+                            <i class="fas fa-clock me-2"></i>
+                            <strong>Status:</strong> 
+                            <span class="badge bg-{{ 'success' if election.status == 'active' else 'warning' if election.status == 'upcoming' else 'danger' }}">
+                                {{ election.status.title() }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="stats-card card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-users fa-2x mb-2"></i>
+                                <h4>{{ total_votes }}</h4>
+                                <p class="mb-0">Total Votes Cast</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Summary -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-pie me-2"></i>Results Summary
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="resultsChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-trophy me-2"></i>Winner
+                        </h5>
+                    </div>
+                    <div class="card-body text-center">
+                        {% if parties %}
+                            {% set winner = parties[0] %}
+                            <div class="mb-3">
+                                {% if winner.logo_filename %}
+                                    <img src="{{ url_for('uploaded_file', filename=winner.logo_filename) }}" 
+                                         alt="{{ winner.name }} Logo" class="party-logo">
+                                {% else %}
+                                    <div class="party-logo mx-auto d-flex align-items-center justify-content-center bg-light">
+                                        <i class="fas fa-image fa-2x text-muted"></i>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <h4 class="text-success">{{ winner.name }}</h4>
+                            <p class="text-muted">{{ winner.votes }} votes ({{ "%.1f"|format(winner.percentage) }}%)</p>
+                            <div class="progress">
+                                <div class="progress-bar bg-success" style="width: {{ winner.percentage }}%"></div>
+                            </div>
+                        {% else %}
+                            <i class="fas fa-question-circle fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No parties participated</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Results -->
+        <div class="row">
+            <div class="col-12">
+                <h3 class="mb-3">
+                    <i class="fas fa-list me-2"></i>Detailed Results
+                </h3>
+                
+                {% if parties %}
+                    <div class="row">
+                        {% for party in parties %}
+                            <div class="col-md-6 col-lg-4">
+                                <div class="card result-card{% if loop.index == 1 %} winner{% endif %} position-relative">
+                                    {% if loop.index == 1 %}
+                                        <div class="winner-badge">
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-trophy me-1"></i>Winner
+                                            </span>
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-start mb-3">
+                                            {% if party.logo_filename %}
+                                                <img src="{{ url_for('uploaded_file', filename=party.logo_filename) }}" 
+                                                     alt="{{ party.name }} Logo" class="party-logo me-3">
+                                            {% else %}
+                                                <div class="party-logo me-3 d-flex align-items-center justify-content-center bg-light">
+                                                    <i class="fas fa-image fa-2x text-muted"></i>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <div class="flex-grow-1">
+                                                <h5 class="card-title mb-1">{{ party.name }}</h5>
+                                                {% if party.description %}
+                                                    <p class="card-text text-muted small mb-2">{{ party.description }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="fw-bold">{{ party.votes }} votes</span>
+                                                <span class="text-muted">{{ "%.1f"|format(party.percentage) }}%</span>
+                                            </div>
+                                            <div class="progress">
+                                                <div class="progress-bar bg-primary" style="width: {{ party.percentage }}%"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="text-center">
+                                            <span class="badge bg-{{ 'success' if loop.index == 1 else 'secondary' }}">
+                                                {{ loop.index }}{% if loop.index == 1 %}st{% elif loop.index == 2 %}nd{% elif loop.index == 3 %}rd{% else %}th{% endif %} Place
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                        <h4 class="text-muted">No Results Available</h4>
+                        <p class="text-muted">No parties participated in this election.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Live Results Note -->
+        {% if election.status == 'active' %}
+            <div class="alert alert-info mt-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Live Results:</strong> These results are updating in real-time as votes are cast. 
+                The final results will be available when the election ends.
+            </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Chart.js configuration
+        const ctx = document.getElementById('resultsChart').getContext('2d');
+        
+        const partyData = {
+            labels: [
+                {% for party in parties %}
+                    '{{ party.name }}',
+                {% endfor %}
+            ],
+            datasets: [{
+                data: [
+                    {% for party in parties %}
+                        {{ party.votes }},
+                    {% endfor %}
+                ],
+                backgroundColor: [
+                    '#28a745', '#007bff', '#ffc107', '#dc3545', '#6f42c1', 
+                    '#fd7e14', '#20c997', '#e83e8c', '#6c757d', '#17a2b8'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        };
+
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: partyData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value} votes (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Auto-refresh for live results
+        {% if election.status == 'active' %}
+            setInterval(function() {
+                fetch('/api/election_results/{{ election._id }}')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Update the page with new data
+                        location.reload();
+                    })
+                    .catch(error => console.error('Error fetching results:', error));
+            }, 30000); // Refresh every 30 seconds
+        {% endif %}
+    </script>
+</body>
+</html> 
