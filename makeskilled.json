@@ -4,14 +4,17 @@
   "description": "Online Voting System",
   "main": "backend/app.py",
   "scripts": {
-    "start": "python backend/app.py"
+    "start": "python backend/app.py",
+    "build": "pip install -r backend/requirements.txt"
   },
   "dependencies": {
-    "python": "^3.8"
+    "python": "3.8.x"
   },
   "engines": {
-    "node": "",
-    "python": ">=3.8.0"
+    "python": "3.8.x"
   },
-  "appType": "python"
+  "appType": "python-flask",
+  "buildCommand": "pip install -r backend/requirements.txt",
+  "startCommand": "python backend/app.py",
+  "installCommand": "pip install -r backend/requirements.txt"
 }
