@@ -1,0 +1,17 @@
+{
+  "name": "online-voting",
+  "version": "1.0.0",
+  "description": "Online Voting System",
+  "main": "backend/app.py",
+  "scripts": {
+    "start": "python backend/app.py"
+  },
+  "dependencies": {
+    "python": "^3.8"
+  },
+  "engines": {
+    "node": "",
+    "python": ">=3.8.0"
+  },
+  "appType": "python"
+}
